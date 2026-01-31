@@ -11,6 +11,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# 默认值
+EMAIL=""
+PORT=""
+
 # 日志函数
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -22,6 +26,56 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# 显示帮助
+show_help() {
+    cat << EOF
+sbctl - Sing-Box 一键安装脚本
+
+用法:
+    $0 [选项]
+
+选项:
+    -e, --email EMAIL    邮箱地址
+    -p, --port PORT      监听端口 (1-65535)
+    -h, --help          显示帮助信息
+
+示例:
+    # 交互式安装
+    $0
+
+    # 非交互式安装
+    $0 -e user@example.com -p 8080
+
+    # 一键安装
+    curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | bash -s -- -e user@example.com -p 8080
+EOF
+}
+
+# 解析参数
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -e|--email)
+                EMAIL="$2"
+                shift 2
+                ;;
+            -p|--port)
+                PORT="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            *)
+                log_error "未知参数: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
 }
 
 # 检查 root 权限
@@ -183,22 +237,33 @@ main() {
     echo "=== sbctl - Sing-Box 一键安装脚本 ==="
     echo ""
     
+    # 解析命令行参数
+    parse_args "$@"
+    
     check_root
     
-    # 获取用户输入
-    read -p "请输入邮箱地址: " email
-    if ! validate_email "$email"; then
+    # 获取用户输入（如果没有通过参数提供）
+    if [ -z "$EMAIL" ]; then
+        read -p "请输入邮箱地址: " EMAIL
+    fi
+    
+    if ! validate_email "$EMAIL"; then
         log_error "邮箱格式不正确"
         exit 1
     fi
     
-    read -p "请输入监听端口 (1-65535): " port
-    if ! validate_port "$port"; then
+    if [ -z "$PORT" ]; then
+        read -p "请输入监听端口 (1-65535): " PORT
+    fi
+    
+    if ! validate_port "$PORT"; then
         log_error "端口号无效"
         exit 1
     fi
     
     echo ""
+    log_info "邮箱: $EMAIL"
+    log_info "端口: $PORT"
     log_info "开始安装..."
     echo ""
     
@@ -213,7 +278,7 @@ main() {
     user_password=$(generate_password)
     
     # 生成配置
-    generate_config "$port" "$email" "$server_password" "$user_password"
+    generate_config "$PORT" "$EMAIL" "$server_password" "$user_password"
     
     # 启动服务
     log_info "启动 sing-box 服务..."
@@ -226,7 +291,7 @@ main() {
     
     # 生成链接
     log_info "生成链接..."
-    ss_link=$(generate_ss_link "$server_password" "$user_password" "$public_ip" "$port" "$email")
+    ss_link=$(generate_ss_link "$server_password" "$user_password" "$public_ip" "$PORT" "$EMAIL")
     sub_content=$(echo -n "$ss_link" | base64 -w 0)
     
     # 输出结果
