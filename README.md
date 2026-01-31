@@ -7,21 +7,20 @@
 **交互式安装（推荐）：**
 
 ```bash
-# root 用户
-curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh)
+```
 
-# 普通用户
-curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | sudo bash
+或使用 wget：
+
+```bash
+bash <(wget -qO- https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh)
 ```
 
 **非交互式安装：**
 
 ```bash
 # 指定邮箱和端口
-curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | bash -s -- -e user@example.com -p 8080
-
-# 或使用 wget
-wget -qO- https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | bash -s -- -e user@example.com -p 8080
+bash <(curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh) -e user@example.com -p 8080
 ```
 
 ## 手动安装
