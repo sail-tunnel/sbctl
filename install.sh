@@ -38,18 +38,21 @@ sbctl - Sing-Box 一键安装脚本
 
 选项:
     -e, --email EMAIL    邮箱地址
-    -p, --port PORT      监听端口 (1-65535)
+    -p, --port PORT      监听端口 (1-65535，默认随机生成)
     -h, --help          显示帮助信息
 
 示例:
-    # 交互式安装
+    # 交互式安装（端口随机生成）
     $0
 
-    # 非交互式安装
+    # 指定邮箱，端口随机
+    $0 -e user@example.com
+
+    # 完全指定
     $0 -e user@example.com -p 8080
 
-    # 一键安装
-    curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | bash -s -- -e user@example.com -p 8080
+    # 一键安装（端口随机）
+    curl -fsSL https://raw.githubusercontent.com/sail-tunnel/sbctl/main/install.sh | bash -s -- -e user@example.com
 EOF
 }
 
@@ -112,6 +115,11 @@ validate_port() {
         return 1
     fi
     return 0
+}
+
+# 生成随机端口 (10000-65535)
+generate_random_port() {
+    echo $((RANDOM % 55536 + 10000))
 }
 
 # 安装基础工具
@@ -253,7 +261,12 @@ main() {
     fi
     
     if [ -z "$PORT" ]; then
-        read -p "请输入监听端口 (1-65535): " PORT
+        PORT=$(generate_random_port)
+        log_info "自动生成随机端口: $PORT"
+        read -p "使用此端口? 或输入自定义端口 (直接回车使用 $PORT): " custom_port
+        if [ -n "$custom_port" ]; then
+            PORT="$custom_port"
+        fi
     fi
     
     if ! validate_port "$PORT"; then
