@@ -20,6 +20,7 @@ func showHelp() {
     sbctl show [选项]     显示当前配置和订阅链接
     sbctl status         查看服务端运行状态
     sbctl restart        重启 sing-box 服务
+    sbctl upgrade        升级 sbctl 核心程序
     sbctl start          启动 sing-box 服务
     sbctl stop           停止 sing-box 服务
     sbctl log            查看服务运行日志
@@ -85,6 +86,8 @@ func main() {
 		} else {
 			fmt.Println("[ERROR] 重启失败:", err)
 		}
+	case "upgrade":
+		cmdUpgrade()
 	case "log":
 		system.ViewLogs()
 	case "help", "--help", "-h":

@@ -64,6 +64,7 @@ sbctl add-user -p 8080 -r Phone
 | `sbctl show` | 显示当前所有节点的连接信息和订阅 |
 | `sbctl show -p <port>` | 仅展示特定端口下的节点/用户详情 |
 | `sbctl status` | 查看 sing-box 运行状态 |
+| `sbctl upgrade` | 升级 sbctl 核心程序到最新版 |
 | `sbctl restart` | 重启服务使新配置生效 (通常 add/init 会自动执行) |
 | `sbctl log` | 查看服务运行日志 |
 
