@@ -121,9 +121,25 @@ func cmdInit() {
 
 	initCmd.Parse(os.Args[2:])
 
-	cfg, err := config.InitBaseConfig(config.DefaultConfigPath)
+	cfg, err := config.ReadConfig(config.DefaultConfigPath)
+	if err == nil && (len(cfg.Inbounds) > 0 || len(cfg.Endpoints) > 0) {
+		fmt.Printf("[WARN] 检测到当前已存在 %d 个节点配置。\n", len(cfg.Inbounds)+len(cfg.Endpoints))
+		fmt.Print("是否清空现有配置后再继续初始化? (y/N): ")
+		var answer string
+		fmt.Scanln(&answer)
+		if answer == "y" || answer == "Y" {
+			fmt.Println("[INFO] 正在重置配置...")
+			cfg, err = config.InitBaseConfig(config.DefaultConfigPath)
+		} else {
+			fmt.Println("[INFO] 保持现有配置，将以追加模式继续。")
+		}
+	} else {
+		// 如果文件不存在或没有任何配置，则正常执行基础初始化
+		cfg, err = config.InitBaseConfig(config.DefaultConfigPath)
+	}
+
 	if err != nil {
-		fmt.Printf("[ERROR] 初始化骨架配置失败: %v\n", err)
+		fmt.Printf("[ERROR] 初始化配置失败: %v\n", err)
 		os.Exit(1)
 	}
 
