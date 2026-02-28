@@ -61,11 +61,34 @@ apt update -qq
 apt install -y systemd || true
 apt install -y sing-box
 
-# ---------- 4. 下载 sbctl ----------
-log_info "下载 sbctl 管理工具..."
-curl -fsSL "$SBCTL_RAW" -o "$SBCTL_BIN"
+# ---------- 4. 安装 sbctl ----------
+log_info "获取 sbctl 管理工具 (Go Edition)..."
+
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)  DL_ARCH="amd64" ;;
+    aarch64) DL_ARCH="arm64" ;;
+    armv7l)  DL_ARCH="arm" ;;
+    *)       log_error "不支持的系统架构: $ARCH"; exit 1 ;;
+esac
+
+# 假设 Release 最终发布的资产名为: sbctl-linux-amd64
+SBCTL_BIN_URL="https://github.com/sail-tunnel/sbctl/releases/latest/download/sbctl-linux-${DL_ARCH}"
+
+if ! curl -fsSL "$SBCTL_BIN_URL" -o "$SBCTL_BIN"; then
+    log_warn "从 Release 下载二进制失败，尝试回退使用 Bash 版本或本地构建。"
+    # 此处作为兜底，如果用户克隆了仓库并运行本地 install.sh
+    if [ -f "./sbctl-linux-${DL_ARCH}" ]; then
+        cp "./sbctl-linux-${DL_ARCH}" "$SBCTL_BIN"
+    else
+        # 兜底层级2：这里应该处理成使用旧版的 bash 或者提示用户编译 (暂时省略展开)
+        log_error "无法获取 sbctl 二进制文件，请检查网络或构建环境。"
+        exit 1
+    fi
+fi
+
 chmod +x "$SBCTL_BIN"
-log_info "sbctl 已安装到 $SBCTL_BIN"
+log_info "sbctl (${DL_ARCH}) 已安装到 $SBCTL_BIN"
 
 # ---------- 5. 初始化配置 ----------
 log_info "开始初始化配置..."
