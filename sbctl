@@ -132,7 +132,7 @@ write_config_shadowsocks() {
 {
   "log": { "level": "info" },
   "dns": {
-    "servers": [{ "address": "tls://8.8.8.8" }]
+    "servers": [{ "type": "tls", "server": "8.8.8.8" }]
   },
   "inbounds": [
     {
@@ -159,7 +159,7 @@ write_config_vmess() {
 {
   "log": { "level": "info" },
   "dns": {
-    "servers": [{ "address": "tls://8.8.8.8" }]
+    "servers": [{ "type": "tls", "server": "8.8.8.8" }]
   },
   "inbounds": [
     {
@@ -190,7 +190,7 @@ write_config_hysteria2() {
 {
   "log": { "level": "info" },
   "dns": {
-    "servers": [{ "address": "tls://8.8.8.8" }]
+    "servers": [{ "type": "tls", "server": "8.8.8.8" }]
   },
   "inbounds": [
     {
