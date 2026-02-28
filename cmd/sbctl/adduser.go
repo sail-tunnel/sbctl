@@ -107,26 +107,36 @@ func cmdAddUser() {
 				break
 			}
 		}
-		// Go x/crypto 生成 wg key pair 的辅助函数这里不再实现，因为提取 sPub 并非必需（客户端只需要服务端的 sPub，不过 add-user 时不知道）
-		// 我们采取更简单直接的方式：从 cfg 的 endpoints 直接借用 sPub，或者让 user 提示一下
-		fmt.Println("[WARN] Go 版本的 WireGuard add-user 由于服务器公钥提取复杂度，请参考已有客户端配置中的服务器公钥。")
-		_, _, sPub, _, _ := protocols.AddWireGuard(cfg, port, remark) // AddWireGuard 函数原本做了完整添加，这里其实要用 Append
 
-		_ = sPriv
+		sPub, err := generator.GetWGPublicKeyFromString(sPriv)
+		if err != nil {
+			fmt.Printf("[ERROR] 派生服务端公钥时遇到错误: %v\n", err)
+			os.Exit(1)
+		}
 
-		cPriv2, cPub2, _ := generator.GenerateWGKeyPair()
+		cPriv, cPub, _ := generator.GenerateWGKeyPair()
 		psk, _ := generator.GeneratePassword()
 		userIdx := peerCount + 2
+		userIP := fmt.Sprintf("10.0.0.%d", userIdx)
+
 		peer := map[string]interface{}{
-			"public_key":     cPub2,
+			"public_key":     cPub,
 			"pre_shared_key": psk,
-			"allowed_ips":    []string{fmt.Sprintf("10.0.0.%d/32", userIdx), fmt.Sprintf("fd00::%d/128", userIdx)},
+			"allowed_ips":    []string{userIP + "/32", fmt.Sprintf("fd00::%d/128", userIdx)},
 			"comment":        remark,
 		}
-		config.AppendEndpointPeer(cfg, port, peer)
-		config.WriteConfig(config.DefaultConfigPath, cfg)
 
-		protocols.PrintWireGuard(ip, port, remark, cPriv2, sPub, psk, fmt.Sprintf("10.0.0.%d", userIdx))
+		if err := config.AppendEndpointPeer(cfg, port, peer); err != nil {
+			fmt.Printf("[ERROR] 追加 Peer 失败: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := config.WriteConfig(config.DefaultConfigPath, cfg); err != nil {
+			fmt.Printf("[ERROR] 写入配置失败: %v\n", err)
+			os.Exit(1)
+		}
+
+		protocols.PrintWireGuard(ip, port, remark, cPriv, sPub, psk, userIP)
 
 	default:
 		fmt.Println("[ERROR] 未知或不支持的协议:", proto)
