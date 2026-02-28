@@ -218,24 +218,31 @@ write_config_wireguard() {
     cat > "$CONFIG_FILE" <<EOF
 {
   "log": { "level": "info" },
-  "inbounds": [
+  "endpoints": [
     {
       "type": "wireguard",
-      "listen": "::",
+      "tag": "wg-in",
       "listen_port": ${port},
-      "system_interface": false,
-      "interface_name": "wg0",
-      "local_address": ["10.0.0.1/24", "fd00::1/64"],
+      "system": false,
+      "name": "wg0",
+      "mtu": 1408,
+      "address": ["10.0.0.1/24", "fd00::1/64"],
       "private_key": "${server_priv}",
       "peers": [
         {
           "public_key": "${client_pub}",
           "pre_shared_key": "${psk}",
-          "allowed_ips": ["0.0.0.0/0", "::/0"],
-          "comment": "${remark}"
+          "allowed_ips": ["10.0.0.2/32", "fd00::2/128"]
         }
-      ],
-      "mtu": 1408
+      ]
+    }
+  ],
+  "inbounds": [
+    {
+      "type": "direct",
+      "tag": "direct-in",
+      "listen": "::",
+      "listen_port": $((port + 1))
     }
   ],
   "outbounds": [{ "type": "direct" }]
@@ -456,8 +463,8 @@ cmd_show() {
     fi
 
     local proto ip port
-    proto=$(python3 -c "import json,sys; d=json.load(open('$CONFIG_FILE')); print(d['inbounds'][0]['type'])" 2>/dev/null || true)
-    port=$(python3 -c "import json,sys; d=json.load(open('$CONFIG_FILE')); print(d['inbounds'][0]['listen_port'])" 2>/dev/null || true)
+    proto=$(python3 -c "import json,sys; d=json.load(open('$CONFIG_FILE')); print(d.get('endpoints', [{}])[0].get('type') if 'endpoints' in d and len(d['endpoints']) > 0 else d['inbounds'][0]['type'])" 2>/dev/null || true)
+    port=$(python3 -c "import json,sys; d=json.load(open('$CONFIG_FILE')); print(d.get('endpoints', [{}])[0].get('listen_port') if 'endpoints' in d and len(d['endpoints']) > 0 else d['inbounds'][0]['listen_port'])" 2>/dev/null || true)
     ip=$(get_public_ip)
 
     echo ""
