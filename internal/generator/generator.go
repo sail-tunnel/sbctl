@@ -38,7 +38,7 @@ func GenerateRandomPort() (int, error) {
 // GetPublicIP 获取当前公网 IP
 func GetPublicIP() string {
 	apis := []string{
-		"http://ifconfig.me",
+		"http://ifconfig.me/ip",
 		"http://icanhazip.com",
 		"http://api.ipify.org",
 	}
