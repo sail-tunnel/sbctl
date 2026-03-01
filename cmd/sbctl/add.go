@@ -12,32 +12,39 @@ import (
 )
 
 // =========================================================
-// init 命令
+// add 命令 - 向现有配置添加新协议
 // =========================================================
-func cmdInit() {
+func cmdAdd() {
 	if !system.CheckRoot() {
 		fmt.Println("[ERROR] 请使用 root 权限运行")
 		os.Exit(1)
 	}
 
-	initCmd := flag.NewFlagSet("init", flag.ExitOnError)
+	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	var remark, protocol string
 	var port int
 
-	initCmd.StringVar(&remark, "r", "", "备注名")
-	initCmd.StringVar(&remark, "remark", "", "备注名")
-	initCmd.IntVar(&port, "p", 0, "端口")
-	initCmd.IntVar(&port, "port", 0, "端口")
-	initCmd.StringVar(&protocol, "P", "", "协议")
-	initCmd.StringVar(&protocol, "protocol", "", "协议")
+	addCmd.StringVar(&remark, "r", "", "备注名")
+	addCmd.StringVar(&remark, "remark", "", "备注名")
+	addCmd.IntVar(&port, "p", 0, "端口")
+	addCmd.IntVar(&port, "port", 0, "端口")
+	addCmd.StringVar(&protocol, "P", "", "协议")
+	addCmd.StringVar(&protocol, "protocol", "", "协议")
 
-	initCmd.Parse(os.Args[2:])
+	addCmd.Parse(os.Args[2:])
 
-	// init 命令总是重置配置文件
-	fmt.Println("[INFO] 正在初始化配置...")
-	cfg, err := config.ResetConfig(config.DefaultConfigPath)
+	// 读取现有配置
+	cfg, err := config.ReadConfig(config.DefaultConfigPath)
 	if err != nil {
-		fmt.Printf("[ERROR] 初始化配置失败: %v\n", err)
+		fmt.Printf("[ERROR] 无法读取配置文件: %v\n", err)
+		fmt.Println("[提示] 请先使用 'sbctl init' 初始化配置")
+		os.Exit(1)
+	}
+
+	// 确保配置结构完整
+	cfg, err = config.InitBaseConfig(config.DefaultConfigPath)
+	if err != nil {
+		fmt.Printf("[ERROR] 配置文件格式有误: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -87,6 +94,7 @@ func cmdInit() {
 		os.Exit(1)
 	}
 
+	// 检查端口冲突
 	if config.CheckPortConflict(cfg, port) {
 		fmt.Printf("[ERROR] 端口 %d 已经被占用！如果你想在此端口增加用户，请使用 'sbctl add-user -p %d'\n", port, port)
 		os.Exit(1)
@@ -118,5 +126,5 @@ func cmdInit() {
 	}
 
 	system.RestartService()
-	fmt.Println("[INFO] 配置已追加！已自动重启服务生效。")
+	fmt.Println("[INFO] 配置已添加！已自动重启服务生效。")
 }

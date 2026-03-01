@@ -11,7 +11,8 @@ func showHelp() {
 	fmt.Printf(`sbctl v2.0.0 (Go Edition) - Sing-Box 多协议多用户管理工具
 
 命令用法:
-    sbctl init <选项>     初始化或追加新协议节点
+    sbctl init <选项>     初始化配置 (会覆盖现有配置)
+    sbctl add <选项>      向现有配置添加新协议节点
     sbctl add-user <选项> 向已有协议端口追加新客户端(用户)
     sbctl show [选项]     显示当前配置和订阅链接
     sbctl status         查看服务端运行状态
@@ -21,10 +22,17 @@ func showHelp() {
     sbctl stop           停止 sing-box 服务
     sbctl log            查看服务运行日志
 
-init 选项 (新节点):
+init 选项 (初始化配置):
     -r, --remark REMARK  自定义节点备注名称 (默认: myserver)
     -p, --port PORT      指定端口号 (如果不指定则随机生成)
     -P, --protocol PROTO 选择协议 (shadowsocks/vmess/hysteria2/wireguard)
+    注意: init 命令会重置并覆盖现有配置文件
+
+add 选项 (添加新协议):
+    -r, --remark REMARK  自定义节点备注名称 (默认: myserver)
+    -p, --port PORT      指定端口号 (如果不指定则随机生成)
+    -P, --protocol PROTO 选择协议 (shadowsocks/vmess/hysteria2/wireguard)
+    注意: add 命令会检查端口冲突，只添加不覆盖
 
 add-user 选项 (新用户):
     -p, --port PORT      目标协议监听的端口
@@ -46,6 +54,8 @@ func main() {
 	switch command {
 	case "init":
 		cmdInit()
+	case "add":
+		cmdAdd()
 	case "add-user":
 		cmdAddUser()
 	case "show":
