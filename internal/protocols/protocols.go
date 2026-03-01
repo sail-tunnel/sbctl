@@ -18,7 +18,7 @@ func AddShadowsocks(cfg *config.SingBoxConfig, port int, remark string) (string,
 
 	listenAddr, _ := netip.ParseAddr("::")
 	badAddr := (*badoption.Addr)(&listenAddr)
-	
+
 	inbound := option.Inbound{
 		Type: "shadowsocks",
 		Tag:  fmt.Sprintf("ss-in-%d", port),
@@ -49,7 +49,7 @@ func AddVMess(cfg *config.SingBoxConfig, port int, remark string) (string, error
 	uuid := generator.GenerateUUID()
 	listenAddr, _ := netip.ParseAddr("::")
 	badAddr := (*badoption.Addr)(&listenAddr)
-	
+
 	inbound := option.Inbound{
 		Type: "vmess",
 		Tag:  fmt.Sprintf("vmess-in-%d", port),
@@ -86,7 +86,7 @@ func AddHysteria2(cfg *config.SingBoxConfig, port int, remark string) (string, e
 
 	listenAddr, _ := netip.ParseAddr("::")
 	badAddr := (*badoption.Addr)(&listenAddr)
-	
+
 	inbound := option.Inbound{
 		Type: "hysteria2",
 		Tag:  fmt.Sprintf("hy2-in-%d", port),

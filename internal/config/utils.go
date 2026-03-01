@@ -20,7 +20,7 @@ import (
 func AppendInboundUser(cfg *SingBoxConfig, port int, user interface{}) error {
 	for i := range cfg.Inbounds {
 		var listenPort uint16
-		
+
 		// 获取 listen_port
 		switch opts := cfg.Inbounds[i].Options.(type) {
 		case *option.ShadowsocksInboundOptions:
@@ -32,7 +32,7 @@ func AppendInboundUser(cfg *SingBoxConfig, port int, user interface{}) error {
 		default:
 			continue
 		}
-		
+
 		if listenPort == uint16(port) {
 			switch cfg.Inbounds[i].Type {
 			case "shadowsocks":

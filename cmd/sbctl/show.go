@@ -39,7 +39,7 @@ func cmdShow() {
 	// 遍历 inbounds
 	for _, ib := range cfg.Inbounds {
 		var port uint16
-		
+
 		switch opts := ib.Options.(type) {
 		case *option.ShadowsocksInboundOptions:
 			port = opts.ListenPort
@@ -84,12 +84,12 @@ func cmdShow() {
 		if ep.Type != "wireguard" {
 			continue
 		}
-		
+
 		wgOpts, ok := ep.Options.(*option.WireGuardEndpointOptions)
 		if !ok {
 			continue
 		}
-		
+
 		port := wgOpts.ListenPort
 		if targetPort != 0 && targetPort != int(port) {
 			continue
@@ -97,7 +97,7 @@ func cmdShow() {
 
 		for i, peer := range wgOpts.Peers {
 			remark := fmt.Sprintf("Peer-%d", i)
-			
+
 			fmt.Printf("\n========== WireGuard ==========\n")
 			fmt.Printf("服务器: %s  端口: %d  备注: %s\n", ip, port, remark)
 			fmt.Println("[WARN] 由于 WireGuard 私钥仅在生成时可知，无法重新完整展示客户端配置文件。")
