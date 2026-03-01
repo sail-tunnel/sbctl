@@ -13,9 +13,20 @@ import (
 )
 
 const (
-	DefaultConfigPath = "/etc/sing-box/config.json"
 	DefaultConfigDir  = "/etc/sing-box"
+	DefaultConfigPath = DefaultConfigDir + "/config.json"
 )
+
+// 用于测试的证书目录覆盖
+var CertsDirOverride string
+
+// GetCertsDir 返回证书目录，测试时可以通过 CertsDirOverride 覆盖
+func GetCertsDir() string {
+	if CertsDirOverride != "" {
+		return CertsDirOverride
+	}
+	return DefaultConfigDir + "/certs"
+}
 
 // SingBoxConfig 使用 sing-box 官方的配置类型
 type SingBoxConfig = option.Options

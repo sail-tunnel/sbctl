@@ -78,8 +78,9 @@ func AddVMess(cfg *config.SingBoxConfig, port int, remark string) (string, error
 
 func AddHysteria2(cfg *config.SingBoxConfig, port int, remark string) (string, error) {
 	password, _ := generator.GeneratePassword()
-	certPath := config.DefaultConfigDir + "/certs/server.crt"
-	keyPath := config.DefaultConfigDir + "/certs/server.key"
+	certsDir := config.GetCertsDir()
+	certPath := certsDir + "/server.crt"
+	keyPath := certsDir + "/server.key"
 	if err := config.GenerateSelfSignedCert(certPath, keyPath); err != nil {
 		return "", err
 	}
