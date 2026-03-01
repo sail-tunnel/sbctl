@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -39,8 +40,12 @@ func ReadConfig(path string) (*SingBoxConfig, error) {
 	}
 	var cfg SingBoxConfig
 	// 使用 context-aware unmarshaling 来正确解析 sing-box 配置
+	// 如果失败（例如缺少 registry），则回退到标准 unmarshal
 	if err := json.UnmarshalContext(context.Background(), data, &cfg); err != nil {
-		return nil, err
+		// 尝试使用标准 unmarshal 作为后备
+		if stdErr := json.Unmarshal(data, &cfg); stdErr != nil {
+			return nil, fmt.Errorf("context unmarshal failed: %w, standard unmarshal also failed: %v", err, stdErr)
+		}
 	}
 	return &cfg, nil
 }
