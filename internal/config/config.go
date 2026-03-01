@@ -2,8 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"net/netip"
 	"os"
 	"path/filepath"
+
+	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/json/badoption"
 )
 
 const (
@@ -11,16 +15,8 @@ const (
 	DefaultConfigDir  = "/etc/sing-box"
 )
 
-// SingBoxConfig 定义我们要读写的 config.json 结构
-// 因为我们只关心我们要追加的字段，其它字段可以使用 map[string]interface{} 或 json.RawMessage 原样保留
-type SingBoxConfig struct {
-	Log       map[string]interface{}   `json:"log,omitempty"`
-	DNS       map[string]interface{}   `json:"dns,omitempty"`
-	Inbounds  []map[string]interface{} `json:"inbounds"`
-	Endpoints []map[string]interface{} `json:"endpoints"`
-	Outbounds []map[string]interface{} `json:"outbounds"`
-	Route     map[string]interface{}   `json:"route,omitempty"`
-}
+// SingBoxConfig 使用 sing-box 官方的配置类型
+type SingBoxConfig = option.Options
 
 // ReadConfig 读取配置文件
 func ReadConfig(path string) (*SingBoxConfig, error) {
@@ -55,27 +51,19 @@ func InitBaseConfig(path string) (*SingBoxConfig, error) {
 	}
 
 	cfg := &SingBoxConfig{
-		Log: map[string]interface{}{"level": "info"},
-		DNS: map[string]interface{}{
-			"servers": []interface{}{
-				map[string]string{
-					"type":   "tls",
-					"server": "8.8.8.8",
-				},
+		Log: &option.LogOptions{
+			Level: "info",
+		},
+		Inbounds:  []option.Inbound{},
+		Endpoints: []option.Endpoint{},
+		Outbounds: []option.Outbound{
+			{
+				Type: "direct",
+				Tag:  "direct",
 			},
 		},
-		Inbounds:  []map[string]interface{}{},
-		Endpoints: []map[string]interface{}{},
-		Outbounds: []map[string]interface{}{
-			{"type": "direct"},
-		},
-		Route: map[string]interface{}{
-			"rules": []interface{}{
-				map[string]string{
-					"protocol": "dns",
-					"action":   "hijack-dns",
-				},
-			},
+		Route: &option.RouteOptions{
+			AutoDetectInterface: true,
 		},
 	}
 	err := WriteConfig(path, cfg)
@@ -84,14 +72,22 @@ func InitBaseConfig(path string) (*SingBoxConfig, error) {
 
 // CheckPortConflict 检查给定的端口是否被当前任何 inbound/endpoint 占用
 func CheckPortConflict(cfg *SingBoxConfig, port int) bool {
+	// 检查 inbounds
 	for _, ib := range cfg.Inbounds {
-		if p, ok := ib["listen_port"].(float64); ok && int(p) == port {
-			return true
+		if opts, ok := ib.Options.(interface{ GetListenOptions() *option.ListenOptions }); ok {
+			if listenOpts := opts.GetListenOptions(); listenOpts != nil && listenOpts.ListenPort == uint16(port) {
+				return true
+			}
 		}
 	}
+	// 检查 endpoints (WireGuard)
 	for _, ep := range cfg.Endpoints {
-		if p, ok := ep["listen_port"].(float64); ok && int(p) == port {
-			return true
+		if ep.Type == "wireguard" {
+			if wgOpts, ok := ep.Options.(*option.WireGuardEndpointOptions); ok {
+				if wgOpts.ListenPort == uint16(port) {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -99,15 +95,26 @@ func CheckPortConflict(cfg *SingBoxConfig, port int) bool {
 
 // EnsureDirectInbound 如果 endpoint 使用了 wg，需要确保有一个空的 direct inbound 兜底
 func EnsureDirectInbound(cfg *SingBoxConfig, fallbackPort int) {
+	// 检查是否已存在 direct inbound
 	for _, ib := range cfg.Inbounds {
-		if t, ok := ib["type"].(string); ok && t == "direct" {
+		if ib.Type == "direct" {
 			return
 		}
 	}
-	cfg.Inbounds = append(cfg.Inbounds, map[string]interface{}{
-		"type":        "direct",
-		"tag":         "direct-in",
-		"listen":      "::",
-		"listen_port": fallbackPort,
+	
+	// 添加 direct inbound
+	listenAddr := "::"
+	addr, _ := netip.ParseAddr(listenAddr)
+	badAddr := (*badoption.Addr)(&addr)
+	
+	cfg.Inbounds = append(cfg.Inbounds, option.Inbound{
+		Type:    "direct",
+		Tag:     "direct-in",
+		Options: &option.DirectInboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     badAddr,
+				ListenPort: uint16(fallbackPort),
+			},
+		},
 	})
 }

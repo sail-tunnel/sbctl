@@ -12,35 +12,63 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sagernet/sing-box/option"
 )
 
 // AppendInboundUser 给对应的端口（Inbound）追加用户
-func AppendInboundUser(cfg *SingBoxConfig, port int, user map[string]interface{}) error {
-	for i, ib := range cfg.Inbounds {
-		if p, ok := ib["listen_port"].(float64); ok && int(p) == port {
-			var users []interface{}
-			if u, ok := ib["users"].([]interface{}); ok {
-				users = u
+func AppendInboundUser(cfg *SingBoxConfig, port int, user interface{}) error {
+	for i := range cfg.Inbounds {
+		var listenPort uint16
+		
+		// 获取 listen_port
+		switch opts := cfg.Inbounds[i].Options.(type) {
+		case *option.ShadowsocksInboundOptions:
+			listenPort = opts.ListenPort
+		case *option.VMessInboundOptions:
+			listenPort = opts.ListenPort
+		case *option.Hysteria2InboundOptions:
+			listenPort = opts.ListenPort
+		default:
+			continue
+		}
+		
+		if listenPort == uint16(port) {
+			switch cfg.Inbounds[i].Type {
+			case "shadowsocks":
+				if ssUser, ok := user.(option.ShadowsocksUser); ok {
+					opts := cfg.Inbounds[i].Options.(*option.ShadowsocksInboundOptions)
+					opts.Users = append(opts.Users, ssUser)
+					return nil
+				}
+			case "vmess":
+				if vmUser, ok := user.(option.VMessUser); ok {
+					opts := cfg.Inbounds[i].Options.(*option.VMessInboundOptions)
+					opts.Users = append(opts.Users, vmUser)
+					return nil
+				}
+			case "hysteria2":
+				if hy2User, ok := user.(option.Hysteria2User); ok {
+					opts := cfg.Inbounds[i].Options.(*option.Hysteria2InboundOptions)
+					opts.Users = append(opts.Users, hy2User)
+					return nil
+				}
 			}
-			users = append(users, user)
-			cfg.Inbounds[i]["users"] = users
-			return nil
 		}
 	}
 	return fmt.Errorf("未在 config.json 的 inbounds 中找到监听端口为 %d 的配置", port)
 }
 
 // AppendEndpointPeer 给对应的端口（Endpoint/WireGuard）追加 Peer
-func AppendEndpointPeer(cfg *SingBoxConfig, port int, peer map[string]interface{}) error {
-	for i, ep := range cfg.Endpoints {
-		if p, ok := ep["listen_port"].(float64); ok && int(p) == port {
-			var peers []interface{}
-			if p, ok := ep["peers"].([]interface{}); ok {
-				peers = p
+func AppendEndpointPeer(cfg *SingBoxConfig, port int, peer option.WireGuardPeer) error {
+	for i := range cfg.Endpoints {
+		if cfg.Endpoints[i].Type == "wireguard" {
+			if wgOpts, ok := cfg.Endpoints[i].Options.(*option.WireGuardEndpointOptions); ok {
+				if wgOpts.ListenPort == uint16(port) {
+					wgOpts.Peers = append(wgOpts.Peers, peer)
+					return nil
+				}
 			}
-			peers = append(peers, peer)
-			cfg.Endpoints[i]["peers"] = peers
-			return nil
 		}
 	}
 	return fmt.Errorf("未在 config.json 的 endpoints 中找到监听端口为 %d 的配置", port)

@@ -3,8 +3,11 @@ package protocols
 import (
 	"encoding/base64"
 	"fmt"
+	"net/netip"
 	"net/url"
 
+	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/json/badoption"
 	"github.com/sail-tunnel/sbctl/internal/config"
 	"github.com/sail-tunnel/sbctl/internal/generator"
 )
@@ -13,21 +16,29 @@ func AddShadowsocks(cfg *config.SingBoxConfig, port int, remark string) (string,
 	serverPass, _ := generator.GeneratePassword()
 	userPass, _ := generator.GeneratePassword()
 
-	inbound := map[string]interface{}{
-		"type":        "shadowsocks",
-		"listen":      "::",
-		"listen_port": port,
-		"method":      "2022-blake3-aes-256-gcm",
-		"password":    serverPass,
-		"users": []interface{}{
-			map[string]interface{}{
-				"name":     remark,
-				"password": userPass,
+	listenAddr, _ := netip.ParseAddr("::")
+	badAddr := (*badoption.Addr)(&listenAddr)
+	
+	inbound := option.Inbound{
+		Type: "shadowsocks",
+		Tag:  fmt.Sprintf("ss-in-%d", port),
+		Options: &option.ShadowsocksInboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     badAddr,
+				ListenPort: uint16(port),
 			},
-		},
-		"multiplex": map[string]interface{}{
-			"enabled": true,
-			"padding": true,
+			Method:   "2022-blake3-aes-256-gcm",
+			Password: serverPass,
+			Users: []option.ShadowsocksUser{
+				{
+					Name:     remark,
+					Password: userPass,
+				},
+			},
+			Multiplex: &option.InboundMultiplexOptions{
+				Enabled: true,
+				Padding: true,
+			},
 		},
 	}
 	cfg.Inbounds = append(cfg.Inbounds, inbound)
@@ -36,20 +47,29 @@ func AddShadowsocks(cfg *config.SingBoxConfig, port int, remark string) (string,
 
 func AddVMess(cfg *config.SingBoxConfig, port int, remark string) (string, error) {
 	uuid := generator.GenerateUUID()
-	inbound := map[string]interface{}{
-		"type":        "vmess",
-		"listen":      "::",
-		"listen_port": port,
-		"users": []interface{}{
-			map[string]interface{}{
-				"name":    remark,
-				"uuid":    uuid,
-				"alterId": 0,
+	listenAddr, _ := netip.ParseAddr("::")
+	badAddr := (*badoption.Addr)(&listenAddr)
+	
+	inbound := option.Inbound{
+		Type: "vmess",
+		Tag:  fmt.Sprintf("vmess-in-%d", port),
+		Options: &option.VMessInboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     badAddr,
+				ListenPort: uint16(port),
 			},
-		},
-		"transport": map[string]interface{}{
-			"type": "ws",
-			"path": "/vmess",
+			Users: []option.VMessUser{
+				{
+					Name: remark,
+					UUID: uuid,
+				},
+			},
+			Transport: &option.V2RayTransportOptions{
+				Type: "ws",
+				WebsocketOptions: option.V2RayWebsocketOptions{
+					Path: "/vmess",
+				},
+			},
 		},
 	}
 	cfg.Inbounds = append(cfg.Inbounds, inbound)
@@ -64,20 +84,30 @@ func AddHysteria2(cfg *config.SingBoxConfig, port int, remark string) (string, e
 		return "", err
 	}
 
-	inbound := map[string]interface{}{
-		"type":        "hysteria2",
-		"listen":      "::",
-		"listen_port": port,
-		"users": []interface{}{
-			map[string]interface{}{
-				"name":     remark,
-				"password": password,
+	listenAddr, _ := netip.ParseAddr("::")
+	badAddr := (*badoption.Addr)(&listenAddr)
+	
+	inbound := option.Inbound{
+		Type: "hysteria2",
+		Tag:  fmt.Sprintf("hy2-in-%d", port),
+		Options: &option.Hysteria2InboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     badAddr,
+				ListenPort: uint16(port),
 			},
-		},
-		"tls": map[string]interface{}{
-			"enabled":          true,
-			"certificate_path": certPath,
-			"key_path":         keyPath,
+			Users: []option.Hysteria2User{
+				{
+					Name:     remark,
+					Password: password,
+				},
+			},
+			InboundTLSOptionsContainer: option.InboundTLSOptionsContainer{
+				TLS: &option.InboundTLSOptions{
+					Enabled:         true,
+					CertificatePath: certPath,
+					KeyPath:         keyPath,
+				},
+			},
 		},
 	}
 	cfg.Inbounds = append(cfg.Inbounds, inbound)
@@ -89,25 +119,31 @@ func AddWireGuard(cfg *config.SingBoxConfig, port int, remark string) (string, s
 	cPriv, cPub, _ := generator.GenerateWGKeyPair()
 	psk, _ := generator.GeneratePassword()
 
-	ep := map[string]interface{}{
-		"type":        "wireguard",
-		"tag":         fmt.Sprintf("wg-in-%d", port),
-		"listen_port": port,
-		"system":      false,
-		"name":        "wg0",
-		"mtu":         1408,
-		"address":     []string{"10.0.0.1/24", "fd00::1/64"},
-		"private_key": sPriv,
-		"peers": []interface{}{
-			map[string]interface{}{
-				"public_key":     cPub,
-				"pre_shared_key": psk,
-				"allowed_ips":    []string{"10.0.0.2/32", "fd00::2/128"},
-				"comment":        remark,
+	addr1, _ := netip.ParsePrefix("10.0.0.1/24")
+	addr2, _ := netip.ParsePrefix("fd00::1/64")
+	peerAddr1, _ := netip.ParsePrefix("10.0.0.2/32")
+	peerAddr2, _ := netip.ParsePrefix("fd00::2/128")
+
+	endpoint := option.Endpoint{
+		Type: "wireguard",
+		Tag:  fmt.Sprintf("wg-in-%d", port),
+		Options: &option.WireGuardEndpointOptions{
+			System:     false,
+			Name:       "wg0",
+			MTU:        1408,
+			Address:    []netip.Prefix{addr1, addr2},
+			PrivateKey: sPriv,
+			ListenPort: uint16(port),
+			Peers: []option.WireGuardPeer{
+				{
+					PublicKey:    cPub,
+					PreSharedKey: psk,
+					AllowedIPs:   []netip.Prefix{peerAddr1, peerAddr2},
+				},
 			},
 		},
 	}
-	cfg.Endpoints = append(cfg.Endpoints, ep)
+	cfg.Endpoints = append(cfg.Endpoints, endpoint)
 	config.EnsureDirectInbound(cfg, port+1)
 	return cPriv, cPub, sPub, psk, nil
 }

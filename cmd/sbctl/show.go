@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sagernet/sing-box/option"
 	"github.com/sail-tunnel/sbctl/internal/config"
 	"github.com/sail-tunnel/sbctl/internal/generator"
 	"github.com/sail-tunnel/sbctl/internal/protocols"
@@ -37,42 +38,42 @@ func cmdShow() {
 
 	// 遍历 inbounds
 	for _, ib := range cfg.Inbounds {
-		portFloat, ok := ib["listen_port"].(float64)
-		if !ok {
-			continue
-		}
-		port := int(portFloat)
-
-		if targetPort != 0 && targetPort != port {
-			continue
-		}
-
-		proto, _ := ib["type"].(string)
-
-		users, ok := ib["users"].([]interface{})
-		if !ok {
+		var port uint16
+		
+		switch opts := ib.Options.(type) {
+		case *option.ShadowsocksInboundOptions:
+			port = opts.ListenPort
+		case *option.VMessInboundOptions:
+			port = opts.ListenPort
+		case *option.Hysteria2InboundOptions:
+			port = opts.ListenPort
+		default:
 			continue
 		}
 
-		for _, u := range users {
-			userMap := u.(map[string]interface{})
-			remark, _ := userMap["name"].(string)
+		if targetPort != 0 && targetPort != int(port) {
+			continue
+		}
 
-			switch proto {
-			case "shadowsocks":
-				serverPass, _ := ib["password"].(string)
-				userPass, _ := userMap["password"].(string)
-				protocols.PrintSS(ip, port, remark, serverPass, userPass)
+		switch ib.Type {
+		case "shadowsocks":
+			ssOpts := ib.Options.(*option.ShadowsocksInboundOptions)
+			for _, user := range ssOpts.Users {
+				protocols.PrintSS(ip, int(port), user.Name, ssOpts.Password, user.Password)
 				found = true
+			}
 
-			case "vmess":
-				uuid, _ := userMap["uuid"].(string)
-				protocols.PrintVMess(ip, port, remark, uuid)
+		case "vmess":
+			vmOpts := ib.Options.(*option.VMessInboundOptions)
+			for _, user := range vmOpts.Users {
+				protocols.PrintVMess(ip, int(port), user.Name, user.UUID)
 				found = true
+			}
 
-			case "hysteria2":
-				pw, _ := userMap["password"].(string)
-				protocols.PrintHysteria2(ip, port, remark, pw)
+		case "hysteria2":
+			hy2Opts := ib.Options.(*option.Hysteria2InboundOptions)
+			for _, user := range hy2Opts.Users {
+				protocols.PrintHysteria2(ip, int(port), user.Name, user.Password)
 				found = true
 			}
 		}
@@ -80,40 +81,30 @@ func cmdShow() {
 
 	// 遍历 endpoints
 	for _, ep := range cfg.Endpoints {
-		portFloat, ok := ep["listen_port"].(float64)
+		if ep.Type != "wireguard" {
+			continue
+		}
+		
+		wgOpts, ok := ep.Options.(*option.WireGuardEndpointOptions)
 		if !ok {
 			continue
 		}
-		port := int(portFloat)
-
-		if targetPort != 0 && targetPort != port {
+		
+		port := wgOpts.ListenPort
+		if targetPort != 0 && targetPort != int(port) {
 			continue
 		}
 
-		proto, _ := ep["type"].(string)
-		if proto == "wireguard" {
-			peers, ok := ep["peers"].([]interface{})
-			if !ok {
-				continue
-			}
-
-			for i, p := range peers {
-				peerMap := p.(map[string]interface{})
-				remark, _ := peerMap["comment"].(string)
-				if remark == "" {
-					remark = fmt.Sprintf("Peer-%d", i)
-				}
-
-				fmt.Printf("\n========== WireGuard ==========\n")
-				fmt.Printf("服务器: %s  端口: %d  备注: %s\n", ip, port, remark)
-				fmt.Println("[WARN] 由于 WireGuard 私钥仅在生成时可知，无法重新完整展示客户端配置文件。")
-				fmt.Printf("分配的内网 IP: 10.0.0.%d\n", i+2)
-				if pub, ok := peerMap["public_key"].(string); ok {
-					fmt.Printf("客户端 Public Key: %s\n", pub)
-				}
-				fmt.Printf("===============================\n")
-				found = true
-			}
+		for i, peer := range wgOpts.Peers {
+			remark := fmt.Sprintf("Peer-%d", i)
+			
+			fmt.Printf("\n========== WireGuard ==========\n")
+			fmt.Printf("服务器: %s  端口: %d  备注: %s\n", ip, port, remark)
+			fmt.Println("[WARN] 由于 WireGuard 私钥仅在生成时可知，无法重新完整展示客户端配置文件。")
+			fmt.Printf("分配的内网 IP: 10.0.0.%d\n", i+2)
+			fmt.Printf("客户端 Public Key: %s\n", peer.PublicKey)
+			fmt.Printf("===============================\n")
+			found = true
 		}
 	}
 

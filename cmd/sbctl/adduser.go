@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 
+	"github.com/sagernet/sing-box/option"
 	"github.com/sail-tunnel/sbctl/internal/config"
 	"github.com/sail-tunnel/sbctl/internal/generator"
 	"github.com/sail-tunnel/sbctl/internal/protocols"
@@ -43,17 +45,32 @@ func cmdAddUser() {
 	}
 
 	var proto string
+	// 检查 inbounds
 	for _, ib := range cfg.Inbounds {
-		if p, ok := ib["listen_port"].(float64); ok && int(p) == port {
-			proto = ib["type"].(string)
+		var listenPort uint16
+		switch opts := ib.Options.(type) {
+		case *option.ShadowsocksInboundOptions:
+			listenPort = opts.ListenPort
+		case *option.VMessInboundOptions:
+			listenPort = opts.ListenPort
+		case *option.Hysteria2InboundOptions:
+			listenPort = opts.ListenPort
+		}
+		if listenPort == uint16(port) {
+			proto = ib.Type
 			break
 		}
 	}
+	// 检查 endpoints
 	if proto == "" {
 		for _, ep := range cfg.Endpoints {
-			if p, ok := ep["listen_port"].(float64); ok && int(p) == port {
-				proto = ep["type"].(string)
-				break
+			if ep.Type == "wireguard" {
+				if wgOpts, ok := ep.Options.(*option.WireGuardEndpointOptions); ok {
+					if wgOpts.ListenPort == uint16(port) {
+						proto = ep.Type
+						break
+					}
+				}
 			}
 		}
 	}
@@ -71,26 +88,28 @@ func cmdAddUser() {
 		up, _ := generator.GeneratePassword()
 		var sp string
 		for _, ib := range cfg.Inbounds {
-			if p, ok := ib["listen_port"].(float64); ok && int(p) == port {
-				sp = ib["password"].(string)
-				break
+			if opts, ok := ib.Options.(*option.ShadowsocksInboundOptions); ok {
+				if opts.ListenPort == uint16(port) {
+					sp = opts.Password
+					break
+				}
 			}
 		}
-		user := map[string]interface{}{"name": remark, "password": up}
+		user := option.ShadowsocksUser{Name: remark, Password: up}
 		config.AppendInboundUser(cfg, port, user)
 		config.WriteConfig(config.DefaultConfigPath, cfg)
 		protocols.PrintSS(ip, port, remark, sp, up)
 
 	case "vmess":
 		uuid := generator.GenerateUUID()
-		user := map[string]interface{}{"name": remark, "uuid": uuid, "alterId": 0}
+		user := option.VMessUser{Name: remark, UUID: uuid}
 		config.AppendInboundUser(cfg, port, user)
 		config.WriteConfig(config.DefaultConfigPath, cfg)
 		protocols.PrintVMess(ip, port, remark, uuid)
 
 	case "hysteria2":
 		pw, _ := generator.GeneratePassword()
-		user := map[string]interface{}{"name": remark, "password": pw}
+		user := option.Hysteria2User{Name: remark, Password: pw}
 		config.AppendInboundUser(cfg, port, user)
 		config.WriteConfig(config.DefaultConfigPath, cfg)
 		protocols.PrintHysteria2(ip, port, remark, pw)
@@ -99,12 +118,14 @@ func cmdAddUser() {
 		var sPriv string
 		var peerCount int
 		for _, ep := range cfg.Endpoints {
-			if p, ok := ep["listen_port"].(float64); ok && int(p) == port {
-				sPriv = ep["private_key"].(string)
-				if peers, ok := ep["peers"].([]interface{}); ok {
-					peerCount = len(peers)
+			if ep.Type == "wireguard" {
+				if wgOpts, ok := ep.Options.(*option.WireGuardEndpointOptions); ok {
+					if wgOpts.ListenPort == uint16(port) {
+						sPriv = wgOpts.PrivateKey
+						peerCount = len(wgOpts.Peers)
+						break
+					}
 				}
-				break
 			}
 		}
 
@@ -119,11 +140,13 @@ func cmdAddUser() {
 		userIdx := peerCount + 2
 		userIP := fmt.Sprintf("10.0.0.%d", userIdx)
 
-		peer := map[string]interface{}{
-			"public_key":     cPub,
-			"pre_shared_key": psk,
-			"allowed_ips":    []string{userIP + "/32", fmt.Sprintf("fd00::%d/128", userIdx)},
-			"comment":        remark,
+		peerAddr1, _ := netip.ParsePrefix(fmt.Sprintf("%s/32", userIP))
+		peerAddr2, _ := netip.ParsePrefix(fmt.Sprintf("fd00::%d/128", userIdx))
+
+		peer := option.WireGuardPeer{
+			PublicKey:    cPub,
+			PreSharedKey: psk,
+			AllowedIPs:   []netip.Prefix{peerAddr1, peerAddr2},
 		}
 
 		if err := config.AppendEndpointPeer(cfg, port, peer); err != nil {

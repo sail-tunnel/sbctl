@@ -28,7 +28,26 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# 检测系统架构
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)  
+        SBCTL_ARCH="amd64"
+        ;;
+    aarch64) 
+        SBCTL_ARCH="arm64"
+        ;;
+    armv7l)  
+        SBCTL_ARCH="arm"
+        ;;
+    *)       
+        log_error "不支持的系统架构: $ARCH"
+        exit 1
+        ;;
+esac
+
 echo "=== sbctl 安装引导 ==="
+echo "系统架构: $ARCH (sbctl: $SBCTL_ARCH)"
 echo ""
 
 # ---------- 1. 基础工具 ----------
@@ -45,41 +64,32 @@ else
 fi
 
 # ---------- 3. sing-box ----------
-log_info "安装 sing-box..."
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://sing-box.app/gpg.key -o /etc/apt/keyrings/sagernet.asc
-chmod a+r /etc/apt/keyrings/sagernet.asc
-cat > /etc/apt/sources.list.d/sagernet.sources <<EOF
-Types: deb
-URIs: https://deb.sagernet.org/
-Suites: *
-Components: *
-Enabled: yes
-Signed-By: /etc/apt/keyrings/sagernet.asc
-EOF
-apt update -qq
-apt install -y systemd || true
-apt install -y sing-box
+log_info "安装 sing-box v1.13.0..."
+
+# 使用官方安装脚本安装指定版本
+SING_VERSION="1.13.0"
+if curl -fsSL https://sing-box.app/deb-install.sh | bash -s -- v${SING_VERSION}; then
+    log_info "sing-box v${SING_VERSION} 安装完成"
+else
+    log_error "sing-box 安装失败"
+    exit 1
+fi
+
+# 启用服务
+systemctl enable sing-box
+log_info "sing-box 服务已启用"
 
 # ---------- 4. 安装 sbctl ----------
 log_info "获取 sbctl 管理工具 (Go Edition)..."
 
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64)  DL_ARCH="amd64" ;;
-    aarch64) DL_ARCH="arm64" ;;
-    armv7l)  DL_ARCH="arm" ;;
-    *)       log_error "不支持的系统架构: $ARCH"; exit 1 ;;
-esac
-
 # 假设 Release 最终发布的资产名为: sbctl-linux-amd64
-SBCTL_BIN_URL="https://github.com/sail-tunnel/sbctl/releases/latest/download/sbctl-linux-${DL_ARCH}"
+SBCTL_BIN_URL="https://github.com/sail-tunnel/sbctl/releases/latest/download/sbctl-linux-${SBCTL_ARCH}"
 
 if ! curl -fsSL "$SBCTL_BIN_URL" -o "$SBCTL_BIN"; then
     log_warn "从 Release 下载二进制失败，尝试回退使用 Bash 版本或本地构建。"
     # 此处作为兜底，如果用户克隆了仓库并运行本地 install.sh
-    if [ -f "./sbctl-linux-${DL_ARCH}" ]; then
-        cp "./sbctl-linux-${DL_ARCH}" "$SBCTL_BIN"
+    if [ -f "./sbctl-linux-${SBCTL_ARCH}" ]; then
+        cp "./sbctl-linux-${SBCTL_ARCH}" "$SBCTL_BIN"
     else
         # 兜底层级2：这里应该处理成使用旧版的 bash 或者提示用户编译 (暂时省略展开)
         log_error "无法获取 sbctl 二进制文件，请检查网络或构建环境。"
@@ -88,7 +98,7 @@ if ! curl -fsSL "$SBCTL_BIN_URL" -o "$SBCTL_BIN"; then
 fi
 
 chmod +x "$SBCTL_BIN"
-log_info "sbctl (${DL_ARCH}) 已安装到 $SBCTL_BIN"
+log_info "sbctl (${SBCTL_ARCH}) 已安装到 $SBCTL_BIN"
 
 # ---------- 5. 初始化配置 ----------
 log_info "开始初始化配置..."
