@@ -65,6 +65,18 @@ func InitBaseConfig(path string) (*SingBoxConfig, error) {
 		Route: &option.RouteOptions{
 			AutoDetectInterface: true,
 		},
+		DNS: &option.DNSOptions{
+			RawDNSOptions: option.RawDNSOptions{
+				Servers: []option.DNSServerOptions{
+					{
+						Tag: "google",
+						Options: &option.LegacyDNSServerOptions{
+							Address: "8.8.8.8",
+						},
+					},
+				},
+			},
+		},
 	}
 	err := WriteConfig(path, cfg)
 	return cfg, err
@@ -101,15 +113,15 @@ func EnsureDirectInbound(cfg *SingBoxConfig, fallbackPort int) {
 			return
 		}
 	}
-	
+
 	// 添加 direct inbound
 	listenAddr := "::"
 	addr, _ := netip.ParseAddr(listenAddr)
 	badAddr := (*badoption.Addr)(&addr)
-	
+
 	cfg.Inbounds = append(cfg.Inbounds, option.Inbound{
-		Type:    "direct",
-		Tag:     "direct-in",
+		Type: "direct",
+		Tag:  "direct-in",
 		Options: &option.DirectInboundOptions{
 			ListenOptions: option.ListenOptions{
 				Listen:     badAddr,
