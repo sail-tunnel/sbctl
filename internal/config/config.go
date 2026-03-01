@@ -1,12 +1,14 @@
 package config
 
 import (
-	"encoding/json"
+	"bytes"
+	"context"
 	"net/netip"
 	"os"
 	"path/filepath"
 
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/json"
 	"github.com/sagernet/sing/common/json/badoption"
 )
 
@@ -25,7 +27,8 @@ func ReadConfig(path string) (*SingBoxConfig, error) {
 		return nil, err
 	}
 	var cfg SingBoxConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	// 使用 context-aware unmarshaling 来正确解析 sing-box 配置
+	if err := json.UnmarshalContext(context.Background(), data, &cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
@@ -37,11 +40,14 @@ func WriteConfig(path string, cfg *SingBoxConfig) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
+	// 使用 sing-box 的 JSON 包来序列化，支持 context-aware marshaling
+	var buf bytes.Buffer
+	encoder := json.NewEncoderContext(context.Background(), &buf)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(cfg); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
 // InitBaseConfig 初始化基础骨架配置
@@ -105,8 +111,9 @@ func ensureCompleteConfig(cfg *SingBoxConfig) {
 		}
 		if !hasDirectOutbound {
 			cfg.Outbounds = append(cfg.Outbounds, option.Outbound{
-				Type: "direct",
-				Tag:  "direct",
+				Type:    "direct",
+				Tag:     "direct",
+				Options: &option.DirectOutboundOptions{},
 			})
 		}
 	}
@@ -230,8 +237,9 @@ func createDefaultConfig(path string) (*SingBoxConfig, error) {
 		Endpoints: []option.Endpoint{},
 		Outbounds: []option.Outbound{
 			{
-				Type: "direct",
-				Tag:  "direct",
+				Type:    "direct",
+				Tag:     "direct",
+				Options: &option.DirectOutboundOptions{},
 			},
 		},
 		Route: &option.RouteOptions{
@@ -293,14 +301,30 @@ func createDefaultConfig(path string) (*SingBoxConfig, error) {
 
 // CheckPortConflict 检查给定的端口是否被当前任何 inbound/endpoint 占用
 func CheckPortConflict(cfg *SingBoxConfig, port int) bool {
-	// 检查 inbounds
+	// 检查 inbounds - 使用类型断言检查各种类型的 inbound options
 	for _, ib := range cfg.Inbounds {
-		if opts, ok := ib.Options.(interface{ GetListenOptions() *option.ListenOptions }); ok {
-			if listenOpts := opts.GetListenOptions(); listenOpts != nil && listenOpts.ListenPort == uint16(port) {
-				return true
+		var listenPort uint16
+
+		switch opts := ib.Options.(type) {
+		case *option.ShadowsocksInboundOptions:
+			listenPort = opts.ListenPort
+		case *option.VMessInboundOptions:
+			listenPort = opts.ListenPort
+		case *option.Hysteria2InboundOptions:
+			listenPort = opts.ListenPort
+		case *option.DirectInboundOptions:
+			listenPort = opts.ListenPort
+		case interface{ GetListenOptions() *option.ListenOptions }:
+			if listenOpts := opts.GetListenOptions(); listenOpts != nil {
+				listenPort = listenOpts.ListenPort
 			}
 		}
+
+		if listenPort == uint16(port) {
+			return true
+		}
 	}
+
 	// 检查 endpoints (WireGuard)
 	for _, ep := range cfg.Endpoints {
 		if ep.Type == "wireguard" {

@@ -53,6 +53,12 @@ func cmdInit() {
 			}
 		} else {
 			fmt.Println("[INFO] 保持现有配置，将以追加模式继续。")
+			// 使用 InitBaseConfig 来确保配置结构完整
+			cfg, err = config.InitBaseConfig(config.DefaultConfigPath)
+			if err != nil {
+				fmt.Printf("[ERROR] 初始化配置失败: %v\n", err)
+				os.Exit(1)
+			}
 		}
 	} else {
 		// 如果文件不存在或没有任何有意义的配置，直接初始化
