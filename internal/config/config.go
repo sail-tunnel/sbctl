@@ -74,6 +74,27 @@ func createDefaultConfig(path string) (*SingBoxConfig, error) {
 		},
 		Route: &option.RouteOptions{
 			AutoDetectInterface: true,
+			Rules: []option.Rule{
+				{
+					Type: "default",
+					DefaultOptions: option.DefaultRule{
+						RuleAction: option.RuleAction{
+							Action: "sniff",
+						},
+					},
+				},
+				{
+					Type: "default",
+					DefaultOptions: option.DefaultRule{
+						RawDefaultRule: option.RawDefaultRule{
+							Protocol: badoption.Listable[string]{"dns"},
+						},
+						RuleAction: option.RuleAction{
+							Action: "hijack-dns",
+						},
+					},
+				},
+			},
 		},
 		DNS: &option.DNSOptions{
 			RawDNSOptions: option.RawDNSOptions{
