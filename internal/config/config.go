@@ -50,6 +50,16 @@ func InitBaseConfig(path string) (*SingBoxConfig, error) {
 		return ReadConfig(path)
 	}
 
+	return createDefaultConfig(path)
+}
+
+// ResetConfig 强制重置配置为默认配置（即使文件已存在）
+func ResetConfig(path string) (*SingBoxConfig, error) {
+	return createDefaultConfig(path)
+}
+
+// createDefaultConfig 创建默认配置
+func createDefaultConfig(path string) (*SingBoxConfig, error) {
 	cfg := &SingBoxConfig{
 		Log: &option.LogOptions{
 			Level: "info",
@@ -69,9 +79,25 @@ func InitBaseConfig(path string) (*SingBoxConfig, error) {
 			RawDNSOptions: option.RawDNSOptions{
 				Servers: []option.DNSServerOptions{
 					{
-						Tag: "google",
-						Options: &option.LegacyDNSServerOptions{
-							Address: "8.8.8.8",
+						Tag:  "google",
+						Type: "udp",
+						Options: &option.RemoteDNSServerOptions{
+							DNSServerAddressOptions: option.DNSServerAddressOptions{
+								Server: "8.8.8.8",
+							},
+						},
+					},
+				},
+				Rules: []option.DNSRule{
+					{
+						Type: "default",
+						DefaultOptions: option.DefaultDNSRule{
+							DNSRuleAction: option.DNSRuleAction{
+								Action: "route",
+								RouteOptions: option.DNSRouteActionOptions{
+									Server: "google",
+								},
+							},
 						},
 					},
 				},
@@ -103,6 +129,22 @@ func CheckPortConflict(cfg *SingBoxConfig, port int) bool {
 		}
 	}
 	return false
+}
+
+// HasMeaningfulConfig 检查配置是否包含有意义的节点配置
+// 如果配置文件不存在或只包含默认的空配置，返回 false
+func HasMeaningfulConfig(path string) bool {
+	cfg, err := ReadConfig(path)
+	if err != nil {
+		return false
+	}
+
+	// 检查是否有实际的节点配置
+	// 注意：我们不计算默认的 direct outbound
+	meaningfulInbounds := len(cfg.Inbounds) > 0
+	meaningfulEndpoints := len(cfg.Endpoints) > 0
+
+	return meaningfulInbounds || meaningfulEndpoints
 }
 
 // EnsureDirectInbound 如果 endpoint 使用了 wg，需要确保有一个空的 direct inbound 兜底
