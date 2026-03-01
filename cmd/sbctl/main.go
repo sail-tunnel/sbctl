@@ -7,8 +7,11 @@ import (
 	"github.com/sail-tunnel/sbctl/internal/system"
 )
 
+// version 在编译时通过 -ldflags "-X main.version=vX.X.X" 注入
+var version = "dev"
+
 func showHelp() {
-	fmt.Printf(`sbctl v2.0.0 (Go Edition) - Sing-Box 多协议多用户管理工具
+	fmt.Printf(`sbctl %s (Go Edition) - Sing-Box 多协议多用户管理工具
 
 命令用法:
     sbctl init <选项>     初始化配置 (会覆盖现有配置)
@@ -40,7 +43,7 @@ add-user 选项 (新用户):
 
 show 选项:
     -p, --port PORT      仅展示特定端口下的节点信息
-`)
+`, version)
 }
 
 func main() {

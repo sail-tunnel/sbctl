@@ -31,7 +31,8 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -ldflags="-s -w" -o sbctl-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/sbctl
+          VERSION=${GITHUB_REF#refs/tags/}
+          go build -ldflags="-s -w -X main.version=${VERSION}" -o sbctl-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/sbctl
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
