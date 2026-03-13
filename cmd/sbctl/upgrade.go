@@ -15,82 +15,83 @@ const (
 	RepoURL = "https://github.com/sail-tunnel/sbctl/releases/latest/download/sbctl-linux-"
 )
 
+const (
+	colorRed    = "\033[0;31m"
+	colorGreen  = "\033[0;32m"
+	colorYellow = "\033[1;33m"
+	colorReset  = "\033[0m"
+)
+
+func logInfo(msg string)  { fmt.Printf("%s[INFO]%s  %s\n", colorGreen, colorReset, msg) }
+func logWarn(msg string)  { fmt.Printf("%s[WARN]%s  %s\n", colorYellow, colorReset, msg) }
+func logError(msg string) { fmt.Printf("%s[ERROR]%s %s\n", colorRed, colorReset, msg) }
+
 func cmdUpgrade() {
 	if !system.CheckRoot() {
-		fmt.Println("[ERROR] 请使用 root 权限运行升级: sudo sbctl upgrade")
+		logError("请使用 root 权限运行: sudo sbctl upgrade")
 		os.Exit(1)
 	}
 
-	arch := runtime.GOARCH
-	// 映射内核架构到下载名
-	dlArch := arch
-	if arch == "amd64" {
-		dlArch = "amd64"
-	} else if arch == "arm64" {
-		dlArch = "arm64"
-	} else if arch == "arm" {
-		dlArch = "arm"
-	} else {
-		fmt.Printf("[ERROR] 不支持的架构: %s\n", arch)
+	switch runtime.GOARCH {
+	case "amd64", "arm64", "arm":
+	default:
+		logError("不支持的架构: " + runtime.GOARCH)
 		os.Exit(1)
 	}
+	dlArch := runtime.GOARCH
+
+	fmt.Println("=== sbctl 升级 ===")
+	fmt.Println()
+	logInfo("当前版本: " + version)
 
 	downloadURL := RepoURL + dlArch
-	fmt.Printf("[INFO] 正在从 GitHub 下载最新版本 (%s)...\n", dlArch)
+	logInfo(fmt.Sprintf("正在下载最新版本 (%s)...", dlArch))
 
 	resp, err := http.Get(downloadURL)
 	if err != nil {
-		fmt.Printf("[ERROR] 下载失败: %v\n", err)
+		logError("下载失败: " + err.Error())
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[ERROR] 下载失败，服务器返回状态码: %d\n", resp.StatusCode)
+		logError(fmt.Sprintf("下载失败，服务器返回状态码: %d", resp.StatusCode))
 		os.Exit(1)
 	}
 
-	// 获取当前运行的可执行文件路径
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("[ERROR] 无法获取当前程序路径: %v\n", err)
+		logError("无法获取当前程序路径: " + err.Error())
 		os.Exit(1)
 	}
 
-	// 先下载到临时文件
 	tmpFile := exePath + ".tmp"
 	out, err := os.Create(tmpFile)
 	if err != nil {
-		fmt.Printf("[ERROR] 无法创建临时文件: %v\n", err)
+		logError("无法创建临时文件: " + err.Error())
 		os.Exit(1)
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		fmt.Printf("[ERROR] 写入临时文件失败: %v\n", err)
+	if _, err = io.Copy(out, resp.Body); err != nil {
+		logError("写入临时文件失败: " + err.Error())
 		os.Exit(1)
 	}
+	out.Close()
 
-	// 给临时文件可执行权限
 	if err := os.Chmod(tmpFile, 0755); err != nil {
-		fmt.Printf("[ERROR] 无法设置权限: %v\n", err)
+		logError("无法设置权限: " + err.Error())
 		os.Exit(1)
 	}
 
-	// 替换原始文件 (Linux 下运行中的二进制文件可以直接被 rename 替换)
 	if err := os.Rename(tmpFile, exePath); err != nil {
-		fmt.Printf("[ERROR] 替换程序失败: %v\n", err)
-		// 尝试通过 mv 命令强行替换
 		cmd := exec.Command("mv", "-f", tmpFile, exePath)
 		if err := cmd.Run(); err != nil {
-			fmt.Printf("[ERROR] 尝试使用 mv 替换也失败了: %v\n", err)
+			logError("替换程序失败: " + err.Error())
 			os.Exit(1)
 		}
 	}
 
-	fmt.Println("[SUCCESS] sbctl 升级成功！")
-
-	// 输出当前版本信息 (如果有版本号记录的话)
-	// fmt.Printf("当前版本: %s\n", Version)
+	fmt.Println()
+	logInfo(fmt.Sprintf("%s升级完成！%s 使用 'sbctl help' 查看所有命令", colorGreen, colorReset))
 }
