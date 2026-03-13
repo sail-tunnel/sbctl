@@ -24,7 +24,7 @@ func cmdShow() {
 
 	showCmd.Parse(os.Args[2:])
 
-	cfg, err := config.ReadConfig(config.GetConfigPath())
+	cfg, err := config.ReadConfig(config.DefaultConfigPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			fmt.Printf("[ERROR] 配置文件不存在：%s\n请先运行 'sbctl init' 进行安装。\n", config.DefaultConfigPath)
