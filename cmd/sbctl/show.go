@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,9 +24,13 @@ func cmdShow() {
 
 	showCmd.Parse(os.Args[2:])
 
-	cfg, err := config.ReadConfig(config.DefaultConfigPath)
+	cfg, err := config.ReadConfig(config.GetConfigPath())
 	if err != nil {
-		fmt.Println("[ERROR] 配置文件不存在或解析失败。请先运行 'sbctl init' 进行安装。")
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Printf("[ERROR] 配置文件不存在：%s\n请先运行 'sbctl init' 进行安装。\n", config.DefaultConfigPath)
+		} else {
+			fmt.Printf("[ERROR] 配置文件解析失败：%v\n", err)
+		}
 		os.Exit(1)
 	}
 
