@@ -2,13 +2,9 @@ package config
 
 import (
 	"bytes"
-	"context"
-	stdjson "encoding/json"
-	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
@@ -34,46 +30,16 @@ func GetCertsDir() string {
 // SingBoxConfig 使用 sing-box 官方的配置类型
 type SingBoxConfig = option.Options
 
-// rawDNSStore 保存无法被 sing-box json 解析的 DNS 原始字节，以便 WriteConfig 时还原
-var rawDNSStore sync.Map // *SingBoxConfig → []byte
-
 // ReadConfig 读取配置文件
 func ReadConfig(path string) (*SingBoxConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var cfg SingBoxConfig
-
-	// 优先用 sing-box 的 context-aware 解析（处理协议类型注册）
-	if err := json.UnmarshalContext(context.Background(), data, &cfg); err == nil {
-		return &cfg, nil
-	}
-
-	// Fallback：sing-box json 解析失败（通常是 DNS transport 类型未注册）
-	// 用标准库把 dns 字段提取为原始 JSON，其余部分继续用 sing-box json 解析
-	var rawMap map[string]stdjson.RawMessage
-	if err := stdjson.Unmarshal(data, &rawMap); err != nil {
-		return nil, fmt.Errorf("配置文件格式无效: %w", err)
-	}
-
-	dnsRaw := rawMap["dns"]
-	delete(rawMap, "dns")
-
-	stripped, err := stdjson.Marshal(rawMap)
+	cfg, err := json.UnmarshalExtendedContext[SingBoxConfig](singBoxContext(), data)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := json.UnmarshalContext(context.Background(), stripped, &cfg); err != nil {
-		return nil, fmt.Errorf("配置文件解析失败: %w", err)
-	}
-
-	// 保存原始 DNS JSON，WriteConfig 时原样写回
-	if dnsRaw != nil {
-		rawDNSStore.Store(&cfg, []byte(dnsRaw))
-	}
-
 	return &cfg, nil
 }
 
@@ -83,25 +49,12 @@ func WriteConfig(path string, cfg *SingBoxConfig) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-
 	var buf bytes.Buffer
-	encoder := json.NewEncoderContext(context.Background(), &buf)
+	encoder := json.NewEncoderContext(singBoxContext(), &buf)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(cfg); err != nil {
 		return err
 	}
-
-	// 如果读取时 DNS 无法被解析，将原始 DNS JSON 注入回输出
-	if dnsRaw, ok := rawDNSStore.Load(cfg); ok {
-		var rawMap map[string]stdjson.RawMessage
-		if err := stdjson.Unmarshal(buf.Bytes(), &rawMap); err == nil {
-			rawMap["dns"] = stdjson.RawMessage(dnsRaw.([]byte))
-			if out, err := stdjson.MarshalIndent(rawMap, "", "  "); err == nil {
-				return os.WriteFile(path, append(out, '\n'), 0644)
-			}
-		}
-	}
-
 	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
