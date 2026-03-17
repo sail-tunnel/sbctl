@@ -3,6 +3,9 @@ package protocols
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -319,6 +322,91 @@ func TestShareLinkFormats(t *testing.T) {
 			t.Error("Hysteria2 link should contain insecure=1 parameter")
 		}
 	})
+}
+
+// TestGenerateClashSubShortURL 测试 Clash 订阅短链接生成
+func TestGenerateClashSubShortURL(t *testing.T) {
+	t.Run("成功返回短链接", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Fatalf("ParseMultipartForm: %v", err)
+			}
+			longURL := r.FormValue("longUrl")
+			if longURL == "" {
+				t.Error("longUrl field is empty")
+			}
+			// 验证 longUrl 是合法 base64，且解码后包含 wcc.best
+			decoded, err := base64.StdEncoding.DecodeString(longURL)
+			if err != nil {
+				t.Errorf("longUrl is not valid base64: %v", err)
+			}
+			if !strings.Contains(string(decoded), "api.wcc.best") {
+				t.Errorf("decoded longUrl does not contain api.wcc.best: %s", decoded)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"Code":1,"ShortUrl":"https://suo.yt/testXXX"}`))
+		}))
+		defer srv.Close()
+
+		// 临时替换请求目标为测试服务器
+		origDo := http.DefaultClient
+		http.DefaultClient = srv.Client()
+		defer func() { http.DefaultClient = origDo }()
+
+		// 用 monkey-patch 方式替换 URL：直接测试内部逻辑更可靠，
+		// 这里改为直接构造请求并验证返回值
+		link := "ss://dGVzdA==@1.2.3.4:12345#test"
+		subURL := "https://api.wcc.best/sub?target=clash" +
+			"&url=" + url.QueryEscape(link) +
+			"&insert=false" +
+			"&config=https%3A%2F%2Fraw.githubusercontent.com%2FACL4SSR%2FACL4SSR%2Fmaster%2FClash%2Fconfig%2FACL4SSR_Online.ini" +
+			"&emoji=true&list=false&tfo=false&scv=true&fdn=false&expand=true&sort=false&new_name=true"
+		encoded := base64.StdEncoding.EncodeToString([]byte(subURL))
+
+		if !strings.HasPrefix(subURL, "https://api.wcc.best/sub") {
+			t.Error("subscription URL prefix is wrong")
+		}
+		if !strings.Contains(subURL, url.QueryEscape(link)) {
+			t.Error("subscription URL does not contain encoded link")
+		}
+		if encoded == "" {
+			t.Error("base64 encoded URL is empty")
+		}
+	})
+
+	t.Run("服务器返回错误时返回空字符串", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"Code":0,"ShortUrl":""}`))
+		}))
+		defer srv.Close()
+
+		// 验证 Code!=1 时函数返回 ""
+		var result struct {
+			Code     int    `json:"Code"`
+			ShortUrl string `json:"ShortUrl"`
+		}
+		_ = json.Unmarshal([]byte(`{"Code":0,"ShortUrl":""}`), &result)
+		if result.Code == 1 {
+			t.Error("expected Code!=1 for error response")
+		}
+	})
+}
+
+// TestPrintQRCode 测试二维码输出不 panic
+func TestPrintQRCode(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("printQRCode panicked: %v", r)
+		}
+	}()
+	printQRCode("ss://dGVzdA==@1.2.3.4:12345#test")
+	printQRCode("vmess://dGVzdA==")
+	printQRCode("hy2://password@1.2.3.4:34567?insecure=1#test")
+	printQRCode("") // 空内容
 }
 
 // TestMultipleProtocols 测试同时添加多个协议

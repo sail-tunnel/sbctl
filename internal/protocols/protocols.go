@@ -1,8 +1,13 @@
 package protocols
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"net/netip"
 	"net/url"
 
@@ -10,7 +15,57 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 	"github.com/sail-tunnel/sbctl/internal/config"
 	"github.com/sail-tunnel/sbctl/internal/generator"
+	qrcode "github.com/skip2/go-qrcode"
 )
+
+func printQRCode(content string) {
+	q, err := qrcode.New(content, qrcode.Medium)
+	if err != nil {
+		return
+	}
+	fmt.Println(q.ToSmallString(false))
+}
+
+// GenerateClashSubShortURL 将分享链接转换为 Clash 订阅并生成短链接
+func GenerateClashSubShortURL(link string) string {
+	subURL := "https://api.wcc.best/sub?target=clash" +
+		"&url=" + url.QueryEscape(link) +
+		"&insert=false" +
+		"&config=https%3A%2F%2Fraw.githubusercontent.com%2FACL4SSR%2FACL4SSR%2Fmaster%2FClash%2Fconfig%2FACL4SSR_Online.ini" +
+		"&emoji=true&list=false&tfo=false&scv=true&fdn=false&expand=true&sort=false&new_name=true"
+
+	encoded := base64.StdEncoding.EncodeToString([]byte(subURL))
+
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	_ = w.WriteField("longUrl", encoded)
+	w.Close()
+
+	req, err := http.NewRequest("POST", "https://suo.yt/short", &body)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Origin", "https://acl4ssr-sub.github.io")
+	req.Header.Set("Referer", "https://acl4ssr-sub.github.io/")
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	data, _ := io.ReadAll(resp.Body)
+	var result struct {
+		Code     int    `json:"Code"`
+		ShortUrl string `json:"ShortUrl"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil || result.Code != 1 {
+		return ""
+	}
+	return result.ShortUrl
+}
 
 func AddShadowsocks(cfg *config.SingBoxConfig, port int, remark string) (string, string, string, error) {
 	serverPass, _ := generator.GeneratePassword()
@@ -154,12 +209,15 @@ func PrintSS(ip string, port int, remark, serverPass, userPass string) {
 	creds := fmt.Sprintf("2022-blake3-aes-256-gcm:%s:%s", serverPass, userPass)
 	encoded := base64.StdEncoding.EncodeToString([]byte(creds))
 	link := fmt.Sprintf("ss://%s@%s:%d#%s", encoded, ip, port, url.QueryEscape(remark))
-	sub := base64.StdEncoding.EncodeToString([]byte(link))
+	shortURL := GenerateClashSubShortURL(link)
 
 	fmt.Printf("\n========== Shadowsocks 2022 ==========\n")
 	fmt.Printf("服务器: %s  端口: %d  备注: %s\n", ip, port, remark)
 	fmt.Printf("分享链接: %s\n", link)
-	fmt.Printf("Base64 订阅: %s\n", sub)
+	if shortURL != "" {
+		fmt.Printf("Clash 订阅: %s\n", shortURL)
+	}
+	printQRCode(link)
 	fmt.Printf("======================================\n")
 }
 
@@ -167,25 +225,31 @@ func PrintVMess(ip string, port int, remark, uuid string) {
 	jsonStr := fmt.Sprintf(`{"v":"2","ps":"%s","add":"%s","port":%d,"id":"%s","aid":0,"net":"ws","type":"none","host":"","path":"/vmess","tls":""}`, remark, ip, port, uuid)
 	encoded := base64.StdEncoding.EncodeToString([]byte(jsonStr))
 	link := fmt.Sprintf("vmess://%s", encoded)
-	sub := base64.StdEncoding.EncodeToString([]byte(link))
+	shortURL := GenerateClashSubShortURL(link)
 
 	fmt.Printf("\n========== VMess + WebSocket ==========\n")
 	fmt.Printf("服务器: %s  端口: %d  备注: %s\n", ip, port, remark)
 	fmt.Printf("UUID: %s  传输: WebSocket /vmess\n", uuid)
 	fmt.Printf("分享链接: %s\n", link)
-	fmt.Printf("Base64 订阅: %s\n", sub)
+	if shortURL != "" {
+		fmt.Printf("Clash 订阅: %s\n", shortURL)
+	}
+	printQRCode(link)
 	fmt.Printf("=======================================\n")
 }
 
 func PrintHysteria2(ip string, port int, remark, password string) {
 	link := fmt.Sprintf("hy2://%s@%s:%d?insecure=1#%s", password, ip, port, url.QueryEscape(remark))
-	sub := base64.StdEncoding.EncodeToString([]byte(link))
+	shortURL := GenerateClashSubShortURL(link)
 
 	fmt.Printf("\n========== Hysteria2 ==========\n")
 	fmt.Printf("服务器: %s  端口: %d  备注: %s\n", ip, port, remark)
 	fmt.Printf("注意: 使用自签名证书，客户端需开启 insecure/跳过验证\n")
 	fmt.Printf("分享链接: %s\n", link)
-	fmt.Printf("Base64 订阅: %s\n", sub)
+	if shortURL != "" {
+		fmt.Printf("Clash 订阅: %s\n", shortURL)
+	}
+	printQRCode(link)
 	fmt.Printf("===============================\n")
 }
 
